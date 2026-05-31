@@ -1,0 +1,152 @@
+-- 1. rank hospitals by total revenue
+
+select hospital_name,sum(medical_expenses) as revenue,
+rank() over(order by sum(medical_expenses) desc) as revenue_rank
+from hospital_data
+group by hospital_name;
+
+-- 2. top 3 hospitals in each location
+
+with hospital_revenue as (
+select location,hospital_name,
+sum(medical_expenses) as revenue
+from hospital_data
+group by location, hospital_name)
+select *
+from (select *,row_number() over(partition by location order by revenue desc) as rn
+from hospital_revenue
+) x
+where rn <= 3;
+
+-- 3. highest revenue generating department
+
+select department, sum(medical_expenses) as revenue
+from hospital_data
+group by department
+order by revenue desc
+limit 1;
+
+-- 4. department revenue contribution percentage
+
+select department,round(sum(medical_expenses) * 100.0 / (select sum(medical_expenses) from hospital_data),2) as contribution_percent
+from hospital_data
+group by department
+order by contribution_percent desc;
+
+-- 5. patient to doctor ratio by department
+
+select department,round(sum(patients_count) /sum(doctors_count),2) as patient_doctor_ratio
+from hospital_data
+group by department
+order by patient_doctor_ratio desc;
+
+-- 6. hospitals performing above average revenue
+
+with hospital_revenue as (select hospital_name, sum(medical_expenses) as revenue
+from hospital_data
+group by hospital_name)
+select *
+from hospital_revenue
+where revenue >
+(select avg(revenue)
+from hospital_revenue);
+
+-- 7. average patient stay duration by department
+
+select department,round(avg(datediff(discharge_date, admission_date)),2) as avg_stay_days
+from hospital_data
+group by department
+order by avg_stay_days desc;
+
+-- 8. top revenue generating hospital-department combinations
+
+select hospital_name, department,
+sum(medical_expenses) as revenue
+from hospital_data
+group by hospital_name, department
+order by revenue desc
+limit 10;
+
+-- 9. running revenue by hospital
+
+select hospital_name, admission_date, medical_expenses, sum(medical_expenses) over( partition by hospital_name order by admission_date ) as running_revenue
+from hospital_data;
+
+-- 10. revenue quartiles
+
+select *, ntile(4) over( order by medical_expenses desc) as expense_quartile
+from hospital_data;
+
+-- 11. highest expense record in each department
+
+with dept_expense as ( select *, rank() over( partition by department order by medical_expenses desc) as rnk
+from hospital_data)
+select *
+from dept_expense
+where rnk = 1;
+
+-- 12. monthly revenue trend
+
+select month(admission_date) as month_no, sum(medical_expenses) as revenue
+from hospital_data
+group by month(admission_date)
+order by month_no;
+
+-- 13. revenue per patient by location
+
+select location, round( sum(medical_expenses) / sum(patients_count),2) as revenue_per_patient
+from hospital_data
+group by location
+order by revenue_per_patient desc;
+
+-- 14. identify overloaded hospitals
+
+select hospital_name,sum(patients_count) as total_patients, sum(doctors_count) as total_doctors, round( sum(patients_count) / sum(doctors_count),2) as patient_doctor_ratio
+from hospital_data
+group by hospital_name
+order by patient_doctor_ratio desc;
+
+-- 15. department revenue share within each hospital
+
+select hospital_name,department,round( sum(medical_expenses) * 100.0 /sum(sum(medical_expenses)) over(partition by hospital_name),2) as revenue_share_percent
+from hospital_data
+group by hospital_name, department;
+
+-- 16. top 5 most expensive treatment records
+
+select *
+from hospital_data
+order by medical_expenses desc
+limit 5;
+
+-- 17. hospital revenue compared to overall average
+
+with revenue_cte as (
+select hospital_name,sum(medical_expenses) as revenue
+from hospital_data
+group by hospital_name)
+
+select *,revenue - (select avg(revenue)
+from revenue_cte) as diff_from_avg
+from revenue_cte;
+
+-- 18. department ranking by total patients
+
+select department, sum(patients_count) as total_patients, dense_rank() over( order by sum(patients_count) desc) as department_rank
+from hospital_data
+group by department;
+
+-- 19. average cost per patient by hospital
+
+select hospital_name,round(sum(medical_expenses) /sum(patients_count),2) as cost_per_patient
+from hospital_data
+group by hospital_name
+order by cost_per_patient desc;
+
+-- 20. high-cost outlier detection
+
+with stats as (select avg(medical_expenses) as avg_cost, stddev(medical_expenses) as std_cost
+from hospital_data)
+select *
+from hospital_data, stats
+where medical_expenses > (avg_cost + 2 * std_cost);
